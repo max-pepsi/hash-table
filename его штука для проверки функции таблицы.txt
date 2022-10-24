@@ -1,0 +1,97 @@
+const char TypeOfKey[6] = { 'б','ц','ц','ц','б','б' };
+const int NumOfSegments = 2000;
+const int NumOfKeys = 6000;
+const int MaxNumOfCollisions = 20; //ОТКУДА ЭТО БРАТЬ???????
+const int StepOfLinearSampling = 97;
+
+struct Keys {
+	char key[6]{ NULL };
+	int numOfH = 0; //можно превратить в константу для проверки удалённого значения
+	Keys* next = NULL;
+	Keys() {};
+};
+
+void HashFunctionCounter(Keys* MassiveOfSegments, Keys*& BadKeys)
+{
+	int hashNum = 0;
+	Keys* tmp = new Keys;
+	Keys* TmpBadKeys = BadKeys; //empty
+	int minHash = 19587; //если ему надо будет объяснить магическую константу тоооо сделать как выше
+
+	for (int i = 0; i < NumOfKeys; i++)
+	{
+
+		// я генерю ключ тут вместо отдельной функции потому что нахуя хранить линкед лист с ними только чтобы перенести его
+		for (int j = 0; j < 6; j++) {
+			if (TypeOfKey[j] == 'ц') {
+				int r_number = rand() % 10 + 48;
+				tmp->key[j] = char(r_number);
+			}
+			if (TypeOfKey[j] == 'б') {
+				int r_number = rand() % 26 + 65;
+				tmp->key[j] = char(r_number);
+			}
+		}
+
+
+		//отыгрывается хэш-функция
+		hashNum = 0 - minHash;
+		for (int j = 0; j < 6; j++)
+			hashNum = hashNum + (tmp->key[j] * tmp->key[j]); // это моя, сложение квадратов и по модулю
+		hashNum = hashNum % NumOfSegments;
+
+
+		MassiveOfSegments[hashNum].numOfH++; //увеличиваем количество сгенеренных ключей подходящих этой ячейке
+		for (int j = 0; j <= MaxNumOfCollisions; j++) //начинаем цикл где пытаемся вставлять
+		{
+			//если по этому адресу ключа ещё нет,
+			if (MassiveOfSegments[hashNum].key[0] == NULL) 
+			{
+				//записать его туда
+				for (int y = 0; y < 6; y++)
+					MassiveOfSegments[hashNum].key[y] = tmp->key[y]; //хранить. чтобы избежать повторов наверное
+				break; //и выйти
+			}//дальше если адрес уже занят и мы почти превысили количество возможных коллизий уже
+			else if (j == MaxNumOfCollisions - 1) 
+			{
+				//добавить этот ключ в плохие ключи
+				if (BadKeys == NULL) 
+				{
+					TmpBadKeys = new Keys;
+					for (int y = 0; y < 6; y++)
+						TmpBadKeys->key[y] = tmp->key[y];
+					TmpBadKeys->next = NULL;
+					BadKeys = TmpBadKeys;
+					break;
+				}
+				else
+				{
+					TmpBadKeys->next = new Keys;
+					TmpBadKeys = TmpBadKeys->next;
+					TmpBadKeys->next = NULL;
+					for (int y = 0; y < 6; y++)
+						TmpBadKeys->key[y] = tmp->key[y];
+					break;
+				}
+			}
+			//иначе продолжать пытаться вставить ключ в другую ячейку своим линейным пробированием
+			else
+			{
+				hashNum += StepOfLinearSampling;
+				if (hashNum > NumOfSegments)
+					hashNum -= NumOfSegments;
+			}
+		}
+	}
+}
+void putCounterInFile() {
+	srand(time(NULL));
+	ofstream out_file("D:\\in-outs\\hash results.txt");
+	Keys* MassiveOfSegments = new Keys[NumOfSegments]; //выделяю память для массива в куче, ибо он не влезает в стек
+	Keys* BadKeys = NULL;
+	HashFunctionCounter(MassiveOfSegments, BadKeys);
+	for (int i = 0; i < NumOfSegments; i++) {
+		out_file << MassiveOfSegments[i].numOfH << endl;
+	}
+	out_file.close();
+}
