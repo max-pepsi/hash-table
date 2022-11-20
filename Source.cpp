@@ -26,13 +26,12 @@ using namespace std;
 
 
 const string TypeOfKey = "бцццбб";
-const int StepOfLinearSampling = 1;
 
-int NumOfSegments = 4;
-int MaxNumOfCollisions = NumOfSegments * 7 / 10; //for expanding
-int FilledSegments = 0;
 
 // для проверки функции хэширования, по методе
+int NumOfSegments = 2000;
+int MaxNumOfCollisions = 2000;
+const int StepOfLinearSampling = 1;
 const int NumOfKeys = 6000;
 struct Keys {
 	string key = "";
@@ -57,34 +56,29 @@ void HashFunctionCounter(Keys* MassiveOfSegments, Keys*& BadKeys)
 
 	for (int i = 0; i < NumOfKeys; i++)
 	{
-
+		tmp->key = "";
 		//ключ генерится сразу здесь чтобы не хранить
 		for (int j = 0; j < 6; j++) {
 			int r_number = TypeOfKey[j] == 'ц' ? rand() % 10 + 48 : rand() % 26 + 65;
 			tmp->key += char(r_number);
 		}
 
-
-		//отыгрывается хэш-функция
 		hashNum = 0 - minHash;
 		for (int j = 0; j < 6; j++)
-			hashNum = hashNum + (tmp->key[j] * tmp->key[j]); // это моя, сложение квадратов и по модулю
+			hashNum = hashNum + (tmp->key[j] * tmp->key[j]); //сложение квадратов и по модулю
 		hashNum = hashNum % NumOfSegments;
 
 
-		MassiveOfSegments[hashNum].numOfH++; //увеличиваем количество сгенеренных ключей подходящих этой ячейке
-		for (int j = 0; j <= MaxNumOfCollisions; j++) //начинаем цикл где пытаемся вставлять
+		MassiveOfSegments[hashNum].numOfH++; 
+		for (int j = 0; j <= MaxNumOfCollisions; j++) 
 		{
-			//если по этому адресу ключа ещё нет,
-			if (MassiveOfSegments[hashNum].key.empty()) 
+			if (MassiveOfSegments[hashNum].key.empty())
 			{
-				//записать его туда
-				MassiveOfSegments[hashNum].key = tmp->key; //хранить. чтобы избежать повторов
-				break; //и выйти
-			}//дальше если адрес уже занят и мы почти превысили количество возможных коллизий уже
-			else if (j == MaxNumOfCollisions - 1) 
+				MassiveOfSegments[hashNum].key = tmp->key;
+				break;
+			}
+			else if (j == MaxNumOfCollisions - 1)
 			{
-				//добавить этот ключ в плохие ключи
 				if (BadKeys == NULL) 
 				{
 					TmpBadKeys = new Keys;
@@ -102,7 +96,6 @@ void HashFunctionCounter(Keys* MassiveOfSegments, Keys*& BadKeys)
 					break;
 				}
 			}
-			//иначе продолжать пытаться вставить ключ в другую ячейку своим линейным пробированием
 			else
 			{
 				hashNum += StepOfLinearSampling;
@@ -112,7 +105,7 @@ void HashFunctionCounter(Keys* MassiveOfSegments, Keys*& BadKeys)
 		}
 	}
 }
-void PutThisInFile() {
+int main_test() {
 	srand(time(NULL));
 	ofstream out_file("D:\\in-outs\\hash results.txt");
 	Keys* MassiveOfSegments = new Keys[NumOfSegments]; //выделяю память для массива в куче, ибо он не влезает в стек
@@ -122,7 +115,13 @@ void PutThisInFile() {
 		out_file << MassiveOfSegments[i].numOfH << endl;
 	}
 	out_file.close();
+	cout << "All done!" << endl;
+	return 0;
 }
+
+
+
+
 
 //BASE
 struct Entry {
@@ -136,12 +135,178 @@ struct Entry {
 	}
 	Entry() {};
 };
-int my_hash(string key) { //сложение квадратов кодов и по модулю
+struct HTable {
+	Entry* storage;
+	int size;
+	double coeff;
+	int step;
+	int filled = 0;
+
+	HTable(int size) {
+		this->size = size;
+		this->storage = new Entry[size];
+		this->step = 1;
+		this->coeff = 0.7;
+	}
+
+	HTable(int size, double coeff, int step) {
+		this->size = size;
+		this->storage = new Entry[size];
+		this->step = step;
+		this->coeff = coeff;
+	}
+
+	HTable() {
+		this->size = 2000;
+		this->storage = new Entry[size];
+		this->coeff = 0.7;
+		this->step = 1;
+	}
+
+	int my_hash(string key);
+	int add(Entry e);
+	bool remove(string key);
+	void expand();
+	int search_key(string key);
+	int search_value(int value);
+
+	void print();
+	void print_in_file();
+
+};
+
+int HTable::my_hash(string key) {
 	int hashNum = -19587;
 	for (int j = 0; j < 6; j++)
 		hashNum = hashNum + (key[j] * key[j]);
-	hashNum = hashNum % NumOfSegments;
+	hashNum = hashNum % size;
 	return hashNum;
+}
+
+//MANIPULATION
+int HTable::add(Entry e) {
+	int hashNum = my_hash(e.key);
+
+	for (int j = 0; j < (size * coeff); j++)
+	{
+		//если по адресу пусто,
+		if (storage[hashNum].state < 1)
+		{
+			//записать его туда и обновить коэффициент. Расширить если нужно
+			storage[hashNum] = e;
+			filled += 1;
+			if (filled > (size * coeff)) {
+				expand();
+				return add(e);
+			}
+			return hashNum;
+		}
+		//если занят, проверить ключ на одинаковость, если одинаковые то запись уже там есть
+		else if (storage[hashNum].key == e.key)
+			return hashNum;
+		//иначе продолжать пытаться вставить ключ в другую ячейку линейным пробированием
+		hashNum += step;
+		if (hashNum >= size)
+			hashNum -= size;
+
+	}
+	//достигнут предел по коллизиям, значит мы обошли 70% таблицы и они были заполнены. увеличиваем
+	expand();
+	return add(e);
+}
+void HTable::expand() {
+	cout << "Расширение таблицы." << endl;
+	int oldSize = size;
+	size *= 2;
+	filled = 0;
+	Entry* newTable = new Entry[size];
+	Entry* tmp = storage;
+	storage = newTable;
+
+	for (int i = 0; i < oldSize; i++) {
+		if (tmp[i].state == 1)
+			add(tmp[i]);
+	}
+	delete[]tmp;
+}
+bool HTable::remove(string key) { //false if wrong index or no elem; prints out collided keys
+	int hashNum = my_hash(key);
+	for (int j = 0; j < size * coeff; j++)
+	{
+		//если по этому адресу пустой элемент, то элемента в таблице нет
+		if (storage[hashNum].state == 0)
+			return false;
+
+		//если он есть, проверить на одинаковость
+		else if (storage[hashNum].state == 1 && storage[hashNum].key == key) {
+			storage[hashNum].state = -1;
+			filled -= 1;
+			return true;
+		}
+		//если удалённый или не тот, продолжаем поиск
+		cout << "Элемент с коллизией: " << storage[hashNum].key << ". Состояние: " << (storage[hashNum].state == 1 ? "заполнен" : "удалён");
+		hashNum += step;
+		if (hashNum >= size)
+			hashNum -= size;
+
+	}
+	return false;
+}
+
+//SEARCH
+int HTable:: search_key(string key) {
+	int hashNum = my_hash(key);
+	for (int j = 0; j < size * coeff; j++)
+	{
+		//если по этому адресу пустой элемент, то ключа в таблице нет
+		if (storage[hashNum].state == 0)
+			return -1;
+
+		//если он есть, проверить на одинаковость
+		else if (storage[hashNum].state == 1 && storage[hashNum].key == key)
+			return hashNum;
+
+		//если удалённый или не тот, продолжаем поиск
+		hashNum += step;
+		if (hashNum >= size)
+			hashNum -= size;
+
+	}
+	return -1;
+}
+int HTable:: search_value(int value) { //checking all of the table
+	for (int j = 0; j < size; j++) {
+		if (storage[j].value == value && storage[j].state == 1) return j;
+	}
+	return -1;
+}
+
+//DISPLAY
+void HTable:: print() {
+	int start, finish;
+	cout << "Введите индексы начала и конца интересующей части таблицы через пробел (ввод не по образцу покажет всю таблицу): ";
+	cin.clear();
+	cin >> start >> finish;
+
+	if (cin.fail() || cin.rdbuf()->in_avail() != 1 || start > finish || start >= size || finish >= size) {
+		cin.clear();
+		cin.ignore(cin.rdbuf()->in_avail());
+		start = 0;
+		finish = size - 1;
+	}
+
+	cout << "Таблица:" << endl;
+	for (int i = start; i <= finish; i++) {
+		cout << "[ " << i << " ] " << setw(6) << storage[i].key << " значение: " << storage[i].value << " статус: " << storage[i].state << endl;
+	}
+}
+void HTable::print_in_file() {
+	ofstream out_file("D:\\in-outs\\hash table.txt");
+	for (int i = 0; i < size; i++) {
+		out_file << "[ " << i << " ] " << setw(6) << storage[i].key << endl;
+	}
+	out_file.close();
+	cout << "Таблица загружена в файл!" << endl;
 }
 
 //CHECKS
@@ -171,147 +336,29 @@ string inp_key() {
 }
 int inp_val() {
 	int val;
-	cout << "Введите число для хранения: ";
+	cout << "Введите положительное целое число: ";
 	cin >> val;
-	while (cin.fail()) {
+	while (cin.fail() || val < 0) {
 		cin.clear();
 		cin.ignore(cin.rdbuf()->in_avail());
-		cout << "Неверный ввод. Число: ";
+		cout << "Неверный ввод. Положительное целое число: ";
 		cin >> val;
 	}
 	return val;
 }
 
 
-//MANIPULATION
-int add(Entry*& table, Entry e);
-
-void expand(Entry*& table) {
-
-	cout << "Расширение таблицы." << endl;
-	int oldNum = NumOfSegments;
-	NumOfSegments *= 2;
-	MaxNumOfCollisions = NumOfSegments * 7 / 10;
-	FilledSegments = 0;
-	Entry* newTable = new Entry[NumOfSegments];
-
-	for (int i = 0; i < oldNum; i++) {
-		if (table[i].state == 1)
-			add(newTable, table[i]);
-	}
-
-	Entry* tmp = table;
-	delete[]tmp;
-	table = newTable;
-}
-int add(Entry*& table, Entry e) {
-	int hashNum = my_hash(e.key);
-
-	for (int j = 0; j < MaxNumOfCollisions; j++)
+void gen(HTable &table) {
+	for (int i = 0; i < table.size * 0.7 - 1; i++)
 	{
-		//если по адресу пусто,
-		if (table[hashNum].state < 1)
-		{
-			//записать его туда и обновить коэффициент. Расширить если нужно
-			table[hashNum] = e;
-			FilledSegments += 1;
-			if (FilledSegments > MaxNumOfCollisions) {
-				expand(table);
-				return add(table, e);
-			}
-			return hashNum;
+		string key = "";
+		//ключ генерится сразу здесь чтобы не хранить
+		for (int j = 0; j < 6; j++) {
+			int r_number = TypeOfKey[j] == 'ц' ? rand() % 10 + 48 : rand() % 26 + 65;
+			key += char(r_number);
 		}
-		//если занят, проверить ключ на одинаковость, если одинаковые то запись уже там есть
-		else if (table[hashNum].key == e.key)
-				return hashNum;
-		//иначе продолжать пытаться вставить ключ в другую ячейку линейным пробированием
-		hashNum += StepOfLinearSampling;
-		if (hashNum >= NumOfSegments)
-			hashNum -= NumOfSegments;
-		
+		table.add(Entry(key, i));
 	}
-	//достигнут предел по коллизиям, значит мы обошли 70% таблицы и они были заполнены. увеличиваем
-	expand(table);
-	return add(table, e);
-}
-bool remove(Entry*& table, string key) { //false if wrong index or no elem; prints out collided keys
-	int hashNum = my_hash(key);
-	for (int j = 0; j < MaxNumOfCollisions; j++)
-	{
-		//если по этому адресу пустой элемент, то элемента в таблице нет
-		if (table[hashNum].state == 0)
-			return false;
-
-		//если он есть, проверить на одинаковость
-		else if (table[hashNum].state == 1 && table[hashNum].key == key) {
-			table[hashNum].state = -1;
-			FilledSegments -= 1;
-			return true;
-		}
-		//если удалённый или не тот, продолжаем поиск
-		cout << "Элемент с коллизией: " << table[hashNum].key << ". Состояние: " << (table[hashNum].state == 1 ? "заполнен" : "удалён");
-		hashNum += StepOfLinearSampling;
-		if (hashNum >= NumOfSegments)
-			hashNum -= NumOfSegments;
-
-	}
-	return false;
-}
-
-//SEARCH
-int search_key(Entry* table, string key) {
-	int hashNum = my_hash(key);
-	for (int j = 0; j < MaxNumOfCollisions; j++)
-	{
-		//если по этому адресу пустой элемент, то ключа в таблице нет
-		if (table[hashNum].state == 0)
-			return -1;
-
-		//если он есть, проверить на одинаковость
-		else if (table[hashNum].state == 1 && table[hashNum].key == key)
-			return hashNum;
-
-		//если удалённый или не тот, продолжаем поиск
-		hashNum += StepOfLinearSampling;
-		if (hashNum >= NumOfSegments)
-			hashNum -= NumOfSegments;
-
-	}
-	return -1;
-}
-int search_value(Entry* table, int value) { //checking all of the table
-	for (int j = 0; j < NumOfSegments; j++) {
-		if (table[j].value == value && table[j].state == 1) return j;
-	}
-	return -1;
-}
-
-//DISPLAY
-void print(Entry* table) {
-	int start, finish;
-	cout << "Введите индексы начала и конца интересующей части таблицы через пробел (ввод не по образцу покажет всю таблицу): ";
-	cin.clear();
-	cin >> start >> finish;
-
-	if (cin.fail() || cin.rdbuf()->in_avail() != 1 || start > finish || start >= NumOfSegments || finish >= NumOfSegments) {
-		cin.clear();
-		cin.ignore(cin.rdbuf()->in_avail());
-		start = 0;
-		finish = NumOfSegments - 1;
-	}
-
-	cout << "Таблица:" << endl;
-	for (int i = start; i <= finish; i++) {
-		cout << "[ " << i << " ] " << setw(6) << table[i].key << " значение: " << table[i].value << " статус: " << table[i].state << endl;
-	}
-}
-void print_in_file(Entry* table) {
-	ofstream out_file("D:\\in-outs\\hash table.txt");
-	for (int i = 0; i < NumOfSegments; i++) {
-		out_file << "[ " << i << " ] " << setw(6) <<  table[i].key << endl;
-	}
-	out_file.close();
-	cout << "Таблица загружена в файл!" << endl;
 }
 
 
@@ -320,7 +367,9 @@ int main() {
 	SetConsoleOutputCP(1251);
 	setlocale(LC_ALL, "rus");
 
-	Entry* table = new Entry[NumOfSegments]; //создание новой таблицы
+	int size = 4;
+
+	HTable table(size);
 	string key;
 	int value;
 
@@ -332,48 +381,62 @@ int main() {
 		cout << "Введите 4, чтобы добавить в файл." << endl;
 		cout << "Введите 5, чтобы найти по ключу." << endl;
 		cout << "Введите 6, чтобы найти по значению." << endl;
-		cout << "Введите 7 для выхода." << endl;
+		cout << "Введите 7, чтобы заполнить меньше 70% таблицы генератором." << endl;
+		cout << "Введите 8, чтобы создать новую таблицу." << endl;
+		cout << "Введите 9 для выхода." << endl;
 
 		cin >> menu_state;
 		if (menu_state == 1) {
 			key = inp_key();
 			value = inp_val();
-			Entry neww = Entry(key, value);
-			value = add(table, neww);
+			Entry e = Entry(key, value);
+			value = table.add(e);
 			cout << "Запись добавлена в сегмент " << value << endl;
 			menu_state = 0;
 		}
 		else if (menu_state == 2) {
 			key = inp_key();
-			if (remove(table, key))
+			if (table.remove(key))
 				cout << "Запись удалена." << endl;
 			else 
 				cout << "Записи не было." << endl;
 			menu_state = 0;
 		}
 		else if (menu_state == 3) {
-			print(table);
+			table.print();
 			menu_state = 0;
 		}
 		else if (menu_state == 4) {
-			print_in_file(table);
+			table.print_in_file();
 			menu_state = 0;
 		}
 		else if (menu_state == 5) {
 			key = inp_key();
-			int a = search_key(table, key);
+			int a = table.search_key(key);
 			if (a == -1) cout << "Записи с таким ключом нет в таблице." << endl;
 			else cout << "Запись находится в сегменте " << a << endl;
 			menu_state = 0;
 		}
 		else if (menu_state == 6) {
 			value = inp_val();
-			int a = search_value(table, value);
+			int a = table.search_value(value);
 			if (a == -1) cout << "Записи с таким значением нет в таблице." << endl;
 			else cout << "Запись находится в сегменте " << a << endl;
 			menu_state = 0;
 		}
 		else if (menu_state == 7) {
+			gen(table);
+			cout << "Таблица заполнена." << endl;
+			menu_state = 0;
+		}
+		else if (menu_state == 8) {
+			cout << "Введите размер" << endl;
+			value = inp_val();
+			table = HTable(value);
+			cout << "Таблица размером " << value << " создана." << endl;
+			menu_state = 0;
+		}
+		else if (menu_state == 9) {
 			break;
 		}
 		else {
